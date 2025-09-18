@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from domino import Domino
 from pathlib import Path
 from typing import Any, List, Dict, Optional, Union
+from urllib.parse import urlparse, urlunparse
 
 
 logging.basicConfig(
@@ -40,7 +41,7 @@ class EnvironmentConfig:
         environment_config_location,
         environment_id: str = "",
         dockerfile_instructions: str = "",
-        environment_variables: List[Dict[str, Any]] = [],
+        environment_variables: List[Dict[str, Any]] = None,
         base_image: str = "",
         post_run_script: str = "",
         post_setup_script: str = "",
@@ -48,12 +49,12 @@ class EnvironmentConfig:
         pre_setup_script: str = "",
         skip_cache: bool = False,
         summary: str = "",
-        supported_clusters: List[str] = [],
-        tags: List[str] = [],
+        supported_clusters: List[str] = None,
+        tags: List[str] = None,
         use_vpn: bool = False,
-        workspace_tools: List[Dict[str, Any]] = [],
+        workspace_tools: List[Dict[str, Any]] = None,
         add_base_dependencies: bool = True,
-        description : Union[str, List[str]] = "",
+        description : Union[str, List[str]] = None,
         is_restricted: bool = True,
         name: str = "",
         organization_owner_id: str = "",
@@ -64,7 +65,7 @@ class EnvironmentConfig:
         self.environment_config_location = environment_config_location
         self.environment_id = environment_id
         self.dockerfile_instructions = dockerfile_instructions
-        self.environment_variables = environment_variables
+        self.environment_variables = environment_variables or []
         self.base_image = base_image
         self.post_run_script = post_run_script
         self.post_setup_script = post_setup_script
@@ -72,10 +73,10 @@ class EnvironmentConfig:
         self.pre_setup_script = pre_setup_script
         self.skip_cache = skip_cache
         self.summary = summary
-        self.supported_clusters = supported_clusters
-        self.tags = tags
+        self.supported_clusters = supported_clusters or []
+        self.tags = tags or []
         self.use_vpn = use_vpn
-        self.workspace_tools = workspace_tools
+        self.workspace_tools = workspace_tools or []
         self.add_base_dependencies = add_base_dependencies
         self.description = description
         self.is_restricted = is_restricted
@@ -119,12 +120,14 @@ class EnvironmentConfig:
         possible_cluster_types = ["Spark", "Ray", "Dask", "Mpi"]
 
         self.supported_clusters = config.get("supportedClusters") if config.get("supportedClusters") else []
+        # Normalize case to Title for comparison (e.g., "spark" -> "Spark")
+        self.supported_clusters = [str(sc).title() for sc in self.supported_clusters]
 
         if self.supported_clusters:
-            for sc in range(len(self.supported_clusters)):
-                if self.supported_clusters[sc] not in possible_cluster_types:
-                    logger.warning("Invalid Cluster Type setting – choose 'Spark', 'Ray', 'Dask', or 'Mpi'")
-                    self.supported_clusters.remove(self.supported_clusters[sc])
+            invalid_values = [sc for sc in self.supported_clusters if sc not in possible_cluster_types]
+            if invalid_values:
+                logger.warning(f"Invalid Cluster Type setting {invalid_values} – choose 'Spark', 'Ray', 'Dask', or 'Mpi'")
+                self.supported_clusters = [sc for sc in self.supported_clusters if sc in possible_cluster_types]
 
 
     def build_workspace_tools(self):
@@ -200,7 +203,7 @@ class EnvironmentConfig:
         self.use_vpn                        = config.get("useVpn") if config.get("useVpn") else False
         self.description                    = config.get("description") if config.get("description") else ""
         self.is_restricted                  = config.get("isRestricted") if config.get("isRestricted") else False
-        self.organization_owner_id          = config.get("organization_owner_id") if config.get("organization_owner_id") else ""
+        self.organization_owner_id          = config.get("organizationOwnerId") if config.get("organizationOwnerId") else ""
 
         self.get_environment_visibility()
         self.get_supported_clusters()
@@ -266,7 +269,7 @@ class EnvironmentConfig:
         if file_unchanged:
            logger.info("File has not changed since last run")
         else:
-            rev_data = domino.create_environment_revision(
+            domino.create_environment_revision(
                 environment_id          = self.environment_id,
                 dockerfile_instructions = self.dockerfile_instructions,
                 environment_variables   = self.environment_variables,
@@ -282,7 +285,7 @@ class EnvironmentConfig:
                 use_vpn                 = self.use_vpn,
                 workspace_tools         = self.workspace_tools
             )
-            # self.restrict_environment_revision()
+            self.restrict_environment_revision()
 
 
     def restrict_environment_revision(self):
@@ -298,8 +301,7 @@ class EnvironmentConfig:
 
 
     def archive_environment(self):
-        response = domino.archive_environment(self.environment_id)
-        return response
+        domino.archive_environment(self.environment_id)
 
 
 def get_domino_host():
@@ -307,48 +309,53 @@ def get_domino_host():
     if not host:
         logger.error("Please provide an environment variable DOMINO_URL with the URL of your Domino instance.")
         sys.exit(1)
+    parsed = urlparse(host if "://" in host else f"https://{host}")
+    parsed = parsed._replace(scheme="https")
+    host = urlunparse(parsed)
     if not host.endswith("/"):
         host += "/"
-    if not host.startswith("https://"):
-        host = "https://" + host
     logger.info(f"Connecting to {host}")
     return host
 
-def get_domino_api_key():
-    api_key = os.getenv("DOMINO_API_KEY")
-    if not api_key:
-        logger.error("Please provide an environment variable DOMINO_API_KEY with your Domino API key.")
-        sys.exit(1)
-    return api_key
 
 def get_target_directory():
     target_directory = os.getenv("TARGET_DIRECTORY")
     if not target_directory:
-        if os.path.isdir(os.path.join(Path(os.getcwd()), "environment_templates")):
-            target_directory = os.path.join(Path(os.getcwd()), "environment_templates") 
-        elif os.path.isdir(os.path.join(Path(os.getcwd()).parent.absolute(), "environment_templates")):
-            target_directory = os.path.join(Path(os.getcwd()).parent.absolute(), "environment_templates") 
+        cwd_candidate = os.path.join(Path(os.getcwd()).absolute(), "environment_templates")
+        parent_candidate = os.path.join(Path(os.getcwd()).parent.absolute(), "environment_templates")
+        if os.path.isdir(cwd_candidate):
+            target_directory = cwd_candidate
+        elif os.path.isdir(parent_candidate):
+            target_directory = parent_candidate
         else:
-            logger.error("Could not find environment templates. Please configure TARGET_DIRECTORY and/or create an environment_templates directory.")
+            logger.error("Could not find 'environment_templates' in current or parent directory. Set TARGET_DIRECTORY or create the folder.")
+            sys.exit(1)
     elif not target_directory.endswith("/environment_templates"):
         if target_directory.endswith("/"):
             target_directory = os.path.join(target_directory, "environment_templates")
         else:
             target_directory = os.path.join(target_directory + "/environment_templates")
+    if not os.path.isdir(target_directory):
+        logger.error(f"Target directory does not exist: {target_directory}")
+        sys.exit(1)
     logger.info(f"Target directory: {target_directory}")
     return target_directory
+
 
 def process_single_environment(environment, target_directory):
     environment_config_location = Path(os.path.join(target_directory, environment, "environment.yaml"))
     if not environment_config_location.exists():
         logger.warning(f"No configuration file found for {environment}– skipping")
         return
-    e = EnvironmentConfig(environment_config_location=environment_config_location)
-    e.parse_config_file()
-    e.create_environment_if_not_exist()
-    e.create_environment_revision()
-    e.restrict_environment_revision()
-    e.archive_environment()
+    try:
+        ec = EnvironmentConfig(environment_config_location=environment_config_location)
+        ec.parse_config_file()
+        ec.create_environment_if_not_exist()
+        ec.create_environment_revision()
+        ec.restrict_environment_revision()
+    except Exception as e:
+        logger.error(f"Failed to process environment '{environment}': {e}")
+        return
 
 
 def process_all_environments(target_directory):
@@ -364,13 +371,22 @@ def process_all_environments(target_directory):
 
 def main():
     global domino
-    if os.environ['DOMINO_PROJECT_OWNER'] and os.environ['DOMINO_PROJECT_NAME']:
-        project = str(os.environ['DOMINO_PROJECT_OWNER'] + "/" + os.environ['DOMINO_PROJECT_NAME'])
-        domino = Domino(project)
+    if all(k in os.environ for k in ("DOMINO_PROJECT_OWNER", "DOMINO_PROJECT_NAME")):
+        domino_project = f"{os.environ['DOMINO_PROJECT_OWNER']}/{os.environ['DOMINO_PROJECT_NAME']}"
+    else:
+        logger.error("Please provide environment variables DOMINO_PROJECT_OWNER and DOMINO_PROJECT_NAME.")
+        sys.exit(1)
+
+    if os.getenv("DOMINO_API_PROXY"):
+        domino = Domino(domino_project)
     else:
         host = get_domino_host()
-        api_key = get_domino_api_key()
-        domino = Domino("integration-test/quick-start", api_key=api_key, host=host, domino_token_file=None, auth_token=None)
+        api_key = os.getenv("DOMINO_API_KEY")
+        auth_token = os.getenv("DOMINO_AUTH_TOKEN")
+        if not api_key and not auth_token:
+            logger.error("Please provide an environment variable DOMINO_API_KEY with your Domino API key, or DOMINO_AUTH_TOKEN with a Service Account token.")
+            sys.exit(1)
+        domino = Domino(domino_project, api_key=api_key, host=host, auth_token=auth_token)
     
     target_directory = get_target_directory()
     process_all_environments(target_directory)

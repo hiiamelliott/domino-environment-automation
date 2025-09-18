@@ -14,10 +14,17 @@ It also supports optional restrictions and workspace tool (IDE) configuration.
 ## Requirements
 
 - Environment variables:
-  - `DOMINO_URL` (Required if run outside a Domino instance): Base URL to your Domino instance (e.g., `https://your-domino.example.com/`).
-  - `DOMINO_API_KEY` (optional): Your Domino API key.
+  - `DOMINO_PROJECT_OWNER` and `DOMINO_PROJECT_NAME` (Required): These are required for configuring the Domino client from `python-domino`. 
   - `TARGET_DIRECTORY` (optional): Base directory that contains `environment_templates/`. If unset, the script will look for `environment_templates/` in the current directory and one directory up from the current working directory.
+  
 
+If run outside Domino:
+  - `DOMINO_URL` (Required if run outside a Domino instance): Base URL to your Domino instance (e.g., `https://your-domino.example.com/`).
+  - One of (Required):
+    - `DOMINO_API_KEY`: Your Domino API key to authenticate with Domino's REST API
+    - or
+    - `DOMINO_AUTH_TOKEN`: A Service Account token for the same purpose.
+  
 ## Run
 
 ```bash
