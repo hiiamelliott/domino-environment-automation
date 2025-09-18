@@ -1,0 +1,64 @@
+name: "test_env"
+description: "This is a test environment"
+image: quay.io/domino/domino-standard-environment:ubuntu22-py3.10-r4.4-domino6.0-standard
+supportedClusters: ["Spark"]
+visibility: "Global"
+addBaseDependencies: false
+isCurated: false
+isRestricted: false
+skipFirstBuild: true
+tags: []
+dockerfileInstructions: |
+    USER root
+    RUN pip install fastapi uvicorn pydantic
+    USER ubuntu
+pluggableWorkspaceTools:
+    jupyter:
+        title: "Jupyter (Python, R, Julia)"
+        iconUrl: "/assets/images/workspace-logos/Jupyter.svg"
+        start: [ "/opt/domino/workspaces/jupyter/start" ]
+        supportedFileExtensions: [ ".ipynb" ]
+        httpProxy:
+            port: 8888
+            rewrite: false
+            internalPath: "/{{ownerUsername}}/{{projectName}}/{{sessionPathComponent}}/{{runId}}/{{#if pathToOpen}}tree/{{pathToOpen}}{{/if}}"
+            requireSubdomain: false
+    jupyterlab:
+        title: "JupyterLab"
+        iconUrl: "/assets/images/workspace-logos/jupyterlab.svg"
+        start: [ "/opt/domino/workspaces/jupyterlab/start" ]
+        httpProxy:
+            internalPath: "/{{ownerUsername}}/{{projectName}}/{{sessionPathComponent}}/{{runId}}/{{#if pathToOpen}}tree/{{pathToOpen}}{{/if}}"
+            port: 8888
+            rewrite: false
+            requireSubdomain: false
+    vscode:
+        title: "vscode"
+        iconUrl: "/assets/images/workspace-logos/vscode.svg"
+        start: [ "/opt/domino/workspaces/vscode/start" ]
+        httpProxy:
+            port: 8888
+            requireSubdomain: false
+    rstudio:
+        title: "RStudio"
+        iconUrl: "/assets/images/workspace-logos/Rstudio.svg"
+        start: [ "/opt/domino/workspaces/rstudio/start" ]
+        httpProxy:
+            port: 8888
+            requireSubdomain: false
+preRunScript: |
+    export NAME="Mr. Smith"
+    echo "Hello $NAME!"
+postRunScript: |
+    export NAME="John"
+    echo "Goodbye $NAME!"
+environmentVariables:
+    - key: ENV1
+      value: FOO
+    - key: ENV2
+      value: bar
+preSetupScript:
+postSetupScript:
+shouldUseVpn: false
+summary: ""
+skipCache: true
