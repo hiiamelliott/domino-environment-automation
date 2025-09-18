@@ -14,9 +14,9 @@ It also supports optional restrictions and workspace tool (IDE) configuration.
 ## Requirements
 
 - Environment variables:
-  - (Required) `DOMINO_URL`: Base URL to your Domino instance (e.g., `https://your-domino.example.com/`).
-  - (Required) `DOMINO_API_KEY`: Your Domino API key.
-  - `TARGET_DIRECTORY` (optional): Base directory that contains `environment_templates/`. If unset, the script will look for templates one directory up from the current working directory.
+  - `DOMINO_URL` (Required if run outside a Domino instance): Base URL to your Domino instance (e.g., `https://your-domino.example.com/`).
+  - `DOMINO_API_KEY` (optional): Your Domino API key.
+  - `TARGET_DIRECTORY` (optional): Base directory that contains `environment_templates/`. If unset, the script will look for `environment_templates/` in the current directory and one directory up from the current working directory.
 
 ## Run
 

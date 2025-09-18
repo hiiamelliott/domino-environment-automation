@@ -324,7 +324,12 @@ def get_domino_api_key():
 def get_target_directory():
     target_directory = os.getenv("TARGET_DIRECTORY")
     if not target_directory:
-        target_directory = os.path.join(Path(os.getcwd()).parent.absolute(), "environment_templates")
+        if os.path.isdir(os.path.join(Path(os.getcwd()), "environment_templates")):
+            target_directory = os.path.join(Path(os.getcwd()), "environment_templates") 
+        elif os.path.isdir(os.path.join(Path(os.getcwd()).parent.absolute(), "environment_templates")):
+            target_directory = os.path.join(Path(os.getcwd()).parent.absolute(), "environment_templates") 
+        else:
+            logger.error("Could not find environment templates. Please configure TARGET_DIRECTORY and/or create an environment_templates directory.")
     elif not target_directory.endswith("/environment_templates"):
         if target_directory.endswith("/"):
             target_directory = os.path.join(target_directory, "environment_templates")
@@ -358,10 +363,15 @@ def process_all_environments(target_directory):
 
 
 def main():
-    host = get_domino_host()
-    api_key = get_domino_api_key()
     global domino
-    domino = Domino("integration-test/quick-start", api_key=api_key, host=host, domino_token_file=None, auth_token=None)
+    if os.environ['DOMINO_PROJECT_OWNER'] and os.environ['DOMINO_PROJECT_NAME']:
+        project = str(os.environ['DOMINO_PROJECT_OWNER'] + "/" + os.environ['DOMINO_PROJECT_NAME'])
+        domino = Domino(project)
+    else:
+        host = get_domino_host()
+        api_key = get_domino_api_key()
+        domino = Domino("integration-test/quick-start", api_key=api_key, host=host, domino_token_file=None, auth_token=None)
+    
     target_directory = get_target_directory()
     process_all_environments(target_directory)
 
